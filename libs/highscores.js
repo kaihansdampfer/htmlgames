@@ -49,10 +49,25 @@
     keysToRemove.forEach((key) => localStorage.removeItem(key));
   }
 
+  function listGames() {
+    const games = [];
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(PREFIX)) {
+        const gameId = key.slice(PREFIX.length);
+        if (gameId) {
+          games.push(gameId);
+        }
+      }
+    }
+    return games.sort();
+  }
+
   root.highscores = {
     submit,
     top,
     reset,
     resetAll,
+    listGames,
   };
 })();
