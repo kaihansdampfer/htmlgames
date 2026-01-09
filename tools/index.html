@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>HTML Games Tools</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #05070f;
+      --panel: rgba(14, 18, 30, 0.9);
+      --accent: #6cf5ff;
+      --warn: #ff8f6c;
+      --text: #e6f3ff;
+      --muted: rgba(230, 243, 255, 0.65);
+    }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    main {
+      max-width: 900px;
+      margin: 32px auto;
+      padding: 0 20px 40px;
+      display: grid;
+      gap: 20px;
+    }
+    .panel {
+      background: var(--panel);
+      border-radius: 16px;
+      padding: 18px 20px;
+      border: 1px solid rgba(108, 245, 255, 0.2);
+    }
+    a {
+      color: var(--accent);
+      text-decoration: none;
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+    }
+    ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: grid;
+      gap: 10px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="panel">
+      <h1>Tools</h1>
+      <p>Manage global settings for HTML Games.</p>
+      <ul>
+        <li><a href="theme.html">Theme selector</a></li>
+        <li><a href="debug.html">Debug controls</a></li>
+        <li><a href="reset.html">Reset tools</a></li>
+      </ul>
+    </div>
+    <div class="panel">
+      <a href="../index.html">Back to games list</a>
+    </div>
+  </main>
+  <script src="../libs/core.js"></script>
+  <script src="../libs/prefs.js"></script>
+  <script src="../libs/themes.js"></script>
+  <script src="../libs/debug.js"></script>
+  <script src="../libs/highscores.js"></script>
+  <script src="../libs/ui.js"></script>
+</body>
+</html>
