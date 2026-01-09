@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Score Tester</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #05070f;
+      --panel: rgba(14, 18, 30, 0.9);
+      --accent: #6cf5ff;
+      --warn: #ff8f6c;
+      --text: #e6f3ff;
+      --muted: rgba(230, 243, 255, 0.65);
+    }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+    }
+    .shell {
+      width: min(92vw, 720px);
+      display: grid;
+      gap: 16px;
+    }
+    .panel {
+      background: var(--panel);
+      border-radius: 16px;
+      padding: 18px 20px;
+      border: 1px solid rgba(108, 245, 255, 0.2);
+    }
+    h1 {
+      margin: 0 0 6px;
+    }
+    .score {
+      font-size: 2.6rem;
+      font-weight: 700;
+    }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    button {
+      padding: 10px 16px;
+      border-radius: 999px;
+      border: none;
+      cursor: pointer;
+      background: var(--accent);
+      color: #031018;
+      font-weight: 700;
+    }
+    button.warn {
+      background: var(--warn);
+      color: #1b0a03;
+    }
+    .highscores h3 {
+      margin: 0 0 8px;
+      font-size: 1rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+    .highscores ol {
+      margin: 0;
+      padding-left: 20px;
+    }
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="panel">
+      <h1>Score Tester</h1>
+      <p>Use this to submit sample scores to the global highscores.</p>
+      <div class="score" id="score">0</div>
+      <div class="controls">
+        <button id="inc">Add +5</button>
+        <button id="reset" class="warn">Reset Score</button>
+        <button id="submit">Submit Score</button>
+      </div>
+    </div>
+
+    <div class="panel highscores">
+      <h3>Top Scores</h3>
+      <ol id="highscore-list"></ol>
+    </div>
+
+    <div class="panel">
+      <a href="../../index.html">Back to games list</a>
+    </div>
+  </div>
+
+  <script src="../../libs/core.js"></script>
+  <script src="../../libs/prefs.js"></script>
+  <script src="../../libs/themes.js"></script>
+  <script src="../../libs/debug.js"></script>
+  <script src="../../libs/highscores.js"></script>
+  <script src="../../libs/ui.js"></script>
+  <script>
+    const gameId = "score-tester";
+    const scoreEl = document.getElementById("score");
+    const highscoreList = document.getElementById("highscore-list");
+    const incBtn = document.getElementById("inc");
+    const resetBtn = document.getElementById("reset");
+    const submitBtn = document.getElementById("submit");
+
+    let score = 0;
+
+    HTMLGAMES.themes.applyTheme(HTMLGAMES.themes.getTheme());
+
+    function renderScore() {
+      scoreEl.textContent = score;
+    }
+
+    function renderHighscores() {
+      const scores = HTMLGAMES.highscores.top(gameId, 5);
+      highscoreList.innerHTML = "";
+      if (!scores.length) {
+        const empty = document.createElement("li");
+        empty.textContent = "No scores yet.";
+        highscoreList.appendChild(empty);
+        return;
+      }
+      scores.forEach((entry) => {
+        const item = document.createElement("li");
+        item.textContent = `${entry.score} pts`;
+        highscoreList.appendChild(item);
+      });
+    }
+
+    incBtn.addEventListener("click", () => {
+      score += 5;
+      renderScore();
+    });
+
+    resetBtn.addEventListener("click", () => {
+      score = 0;
+      renderScore();
+    });
+
+    submitBtn.addEventListener("click", () => {
+      HTMLGAMES.highscores.submit(gameId, score);
+      HTMLGAMES.debug.log("Score submitted", { score });
+      renderHighscores();
+    });
+
+    renderScore();
+    renderHighscores();
+  </script>
+</body>
+</html>
