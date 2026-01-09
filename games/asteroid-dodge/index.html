@@ -249,6 +249,14 @@
 
     function renderHighscores() {
       const scores = HTMLGAMES.highscores.top(gameId, 5);
+      highscoreList.innerHTML = "";
+      if (!scores.length) {
+        const empty = document.createElement("li");
+        empty.textContent = "No scores yet.";
+        highscoreList.appendChild(empty);
+      } else {
+        scores.forEach((entry) => {
+          const item = document.createElement("li");
       highscoreList.innerHTML = \"\";
       if (!scores.length) {
         const empty = document.createElement(\"li\");
