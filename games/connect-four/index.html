@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Connect Four - HTML Game</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --board-bg: #1c1f2b;
+      --slot-bg: #0f1118;
+      --red: #e85d5d;
+      --yellow: #f7c948;
+      --accent: #6dd3fb;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: radial-gradient(circle at top, #242b46, #0f1118 55%);
+      color: #f4f5f8;
+      display: flex;
+      justify-content: center;
+      padding: 24px;
+      box-sizing: border-box;
+    }
+
+    .game {
+      width: min(920px, 100%);
+      display: grid;
+      gap: 20px;
+    }
+
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      background: rgba(15, 17, 24, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 18px 20px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
+    }
+
+    h1 {
+      font-size: clamp(1.5rem, 2.6vw, 2.2rem);
+      margin: 0;
+    }
+
+    .status {
+      font-size: 1rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .status .chip {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      background: var(--red);
+      box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.35);
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    button {
+      border: none;
+      border-radius: 999px;
+      padding: 10px 16px;
+      font-weight: 600;
+      cursor: pointer;
+      background: var(--accent);
+      color: #081018;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+      box-shadow: 0 8px 18px rgba(109, 211, 251, 0.3);
+    }
+
+    button.secondary {
+      background: rgba(255, 255, 255, 0.08);
+      color: inherit;
+      box-shadow: none;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+    }
+
+    .board {
+      display: grid;
+      gap: 10px;
+      background: var(--board-bg);
+      padding: 16px;
+      border-radius: 20px;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+    }
+
+    .column-buttons {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 10px;
+    }
+
+    .drop-btn {
+      padding: 8px 0;
+      font-size: 0.9rem;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.1);
+      color: inherit;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+
+    .drop-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 10px;
+    }
+
+    .slot {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      border-radius: 50%;
+      background: var(--slot-bg);
+      border: 2px solid rgba(255, 255, 255, 0.05);
+      display: grid;
+      place-items: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .slot::after {
+      content: "";
+      width: 80%;
+      height: 80%;
+      border-radius: 50%;
+      background: var(--slot-bg);
+      box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.4);
+      transition: transform 0.25s ease, background 0.25s ease;
+    }
+
+    .slot.red::after {
+      background: var(--red);
+      transform: translateY(-2%);
+    }
+
+    .slot.yellow::after {
+      background: var(--yellow);
+      transform: translateY(-2%);
+    }
+
+    .slot.winning::after {
+      box-shadow: 0 0 16px rgba(255, 255, 255, 0.6);
+    }
+
+    .instructions {
+      background: rgba(15, 17, 24, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 16px 20px;
+      line-height: 1.6;
+    }
+
+    .instructions strong {
+      color: var(--accent);
+    }
+
+    @media (max-width: 680px) {
+      header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .column-buttons,
+      .grid {
+        gap: 6px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="game">
+    <header>
+      <div>
+        <h1>Connect Four Clash</h1>
+        <p>Drop discs and be the first to connect four in a row.</p>
+      </div>
+      <div class="status" aria-live="polite">
+        <span class="chip" aria-hidden="true"></span>
+        <span id="statusText">Red goes first.</span>
+      </div>
+      <div class="controls">
+        <button id="resetBtn">Reset Game</button>
+        <button id="swapBtn" class="secondary">Swap Colors</button>
+      </div>
+    </header>
+
+    <section class="board" aria-label="Connect Four board">
+      <div class="column-buttons" id="columnButtons" aria-hidden="true"></div>
+      <div class="grid" id="grid"></div>
+    </section>
+
+    <section class="instructions">
+      <strong>How to play:</strong>
+      <ul>
+        <li>Click a column to drop your disc.</li>
+        <li>Connect four vertically, horizontally, or diagonally to win.</li>
+        <li>Use <em>Swap Colors</em> to decide who starts if you want a rematch.</li>
+      </ul>
+    </section>
+  </main>
+
+  <script>
+    const rows = 6;
+    const columns = 7;
+    const grid = Array.from({ length: rows }, () => Array(columns).fill(null));
+    const gridEl = document.getElementById("grid");
+    const columnButtonsEl = document.getElementById("columnButtons");
+    const statusChip = document.querySelector(".status .chip");
+    const statusText = document.getElementById("statusText");
+    const resetBtn = document.getElementById("resetBtn");
+    const swapBtn = document.getElementById("swapBtn");
+
+    let currentPlayer = "red";
+    let isLocked = false;
+
+    const slots = [];
+
+    function buildBoard() {
+      gridEl.innerHTML = "";
+      columnButtonsEl.innerHTML = "";
+      slots.length = 0;
+
+      for (let c = 0; c < columns; c += 1) {
+        const button = document.createElement("button");
+        button.className = "drop-btn";
+        button.type = "button";
+        button.textContent = `Drop ${c + 1}`;
+        button.addEventListener("click", () => handleMove(c));
+        columnButtonsEl.appendChild(button);
+      }
+
+      for (let r = 0; r < rows; r += 1) {
+        for (let c = 0; c < columns; c += 1) {
+          const slot = document.createElement("div");
+          slot.className = "slot";
+          slot.dataset.row = r;
+          slot.dataset.col = c;
+          gridEl.appendChild(slot);
+          slots.push(slot);
+        }
+      }
+    }
+
+    function updateStatus(message) {
+      statusText.textContent = message;
+      statusChip.style.background = currentPlayer === "red" ? "var(--red)" : "var(--yellow)";
+    }
+
+    function resetBoard() {
+      for (let r = 0; r < rows; r += 1) {
+        for (let c = 0; c < columns; c += 1) {
+          grid[r][c] = null;
+        }
+      }
+      slots.forEach((slot) => {
+        slot.className = "slot";
+      });
+      isLocked = false;
+      updateStatus(`${capitalize(currentPlayer)} goes first.`);
+    }
+
+    function capitalize(value) {
+      return value.charAt(0).toUpperCase() + value.slice(1);
+    }
+
+    function handleMove(column) {
+      if (isLocked) return;
+      const row = findOpenRow(column);
+      if (row === -1) {
+        updateStatus("That column is full. Try another one!");
+        return;
+      }
+      placeDisc(row, column, currentPlayer);
+      const winningLine = checkWinner(row, column, currentPlayer);
+      if (winningLine.length > 0) {
+        announceWinner(currentPlayer, winningLine);
+        return;
+      }
+      if (isBoardFull()) {
+        updateStatus("It's a draw! Hit Reset to play again.");
+        isLocked = true;
+        return;
+      }
+      currentPlayer = currentPlayer === "red" ? "yellow" : "red";
+      updateStatus(`${capitalize(currentPlayer)}'s turn.`);
+    }
+
+    function findOpenRow(column) {
+      for (let r = rows - 1; r >= 0; r -= 1) {
+        if (!grid[r][column]) return r;
+      }
+      return -1;
+    }
+
+    function placeDisc(row, column, player) {
+      grid[row][column] = player;
+      const slot = slots[row * columns + column];
+      slot.classList.add(player);
+    }
+
+    function checkWinner(row, column, player) {
+      const directions = [
+        { dr: 0, dc: 1 },
+        { dr: 1, dc: 0 },
+        { dr: 1, dc: 1 },
+        { dr: 1, dc: -1 },
+      ];
+
+      for (const { dr, dc } of directions) {
+        const line = collectLine(row, column, player, dr, dc);
+        if (line.length >= 4) {
+          return line;
+        }
+      }
+      return [];
+    }
+
+    function collectLine(row, column, player, dr, dc) {
+      const line = [{ row, column }];
+      let r = row + dr;
+      let c = column + dc;
+      while (isInBounds(r, c) && grid[r][c] === player) {
+        line.push({ row: r, column: c });
+        r += dr;
+        c += dc;
+      }
+      r = row - dr;
+      c = column - dc;
+      while (isInBounds(r, c) && grid[r][c] === player) {
+        line.unshift({ row: r, column: c });
+        r -= dr;
+        c -= dc;
+      }
+      return line;
+    }
+
+    function isInBounds(row, column) {
+      return row >= 0 && row < rows && column >= 0 && column < columns;
+    }
+
+    function announceWinner(player, winningLine) {
+      winningLine.forEach(({ row, column }) => {
+        const slot = slots[row * columns + column];
+        slot.classList.add("winning");
+      });
+      updateStatus(`${capitalize(player)} wins! Hit Reset to play again.`);
+      isLocked = true;
+    }
+
+    function isBoardFull() {
+      return grid.every((row) => row.every(Boolean));
+    }
+
+    resetBtn.addEventListener("click", resetBoard);
+    swapBtn.addEventListener("click", () => {
+      currentPlayer = currentPlayer === "red" ? "yellow" : "red";
+      resetBoard();
+    });
+
+    buildBoard();
+    updateStatus("Red goes first.");
+  </script>
+</body>
+</html>
