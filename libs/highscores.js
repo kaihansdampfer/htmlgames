@@ -38,17 +38,6 @@
     prefs.remove(keyFor(gameId));
   }
 
-  function listGames() {
-    const ids = new Set();
-    for (let i = 0; i < localStorage.length; i += 1) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith(PREFIX)) {
-        ids.add(key.replace(PREFIX, ""));
-      }
-    }
-    return Array.from(ids).sort();
-  }
-
   function resetAll() {
     const keysToRemove = [];
     for (let i = 0; i < localStorage.length; i += 1) {
@@ -63,7 +52,6 @@
   root.highscores = {
     submit,
     top,
-    listGames,
     reset,
     resetAll,
   };
