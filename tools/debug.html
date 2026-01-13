@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Debug Tool</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #05070f;
+      --panel: rgba(14, 18, 30, 0.9);
+      --accent: #6cf5ff;
+      --warn: #ff8f6c;
+      --text: #e6f3ff;
+      --muted: rgba(230, 243, 255, 0.65);
+    }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    main {
+      max-width: 900px;
+      margin: 32px auto;
+      padding: 0 20px 40px;
+      display: grid;
+      gap: 20px;
+    }
+    .panel {
+      background: var(--panel);
+      border-radius: 16px;
+      padding: 18px 20px;
+      border: 1px solid rgba(108, 245, 255, 0.2);
+      display: grid;
+      gap: 12px;
+    }
+    .control {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: grid;
+      gap: 8px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="panel">
+      <h1>Debug Controls</h1>
+      <p>Debug is <strong id="debug-state"></strong>.</p>
+      <div id="debug-toggle"></div>
+    </div>
+    <div class="panel">
+      <h2>Quick Debug Links</h2>
+      <ul>
+        <li><a href="../games/asteroid-dodge/?debug=1">Asteroid Dodge (debug=1)</a></li>
+        <li><a href="../games/connect-four/?debug=1">Connect Four Clash (debug=1)</a></li>
+      </ul>
+    </div>
+    <div class="panel">
+      <a href="index.html">Back to tools</a>
+    </div>
+  </main>
+  <script src="../libs/core.js"></script>
+  <script src="../libs/prefs.js"></script>
+  <script src="../libs/themes.js"></script>
+  <script src="../libs/debug.js"></script>
+  <script src="../libs/highscores.js"></script>
+  <script src="../libs/ui.js"></script>
+  <script>
+    const debugState = document.getElementById("debug-state");
+    const toggle = document.getElementById("debug-toggle");
+    HTMLGAMES.ui.renderDebugToggle(toggle);
+    debugState.textContent = HTMLGAMES.debug.isDebug() ? "enabled" : "disabled";
+  </script>
+</body>
+</html>

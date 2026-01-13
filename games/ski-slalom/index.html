@@ -1,0 +1,411 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ski Slalom Sprint - HTML Game</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #07111a;
+      --panel: rgba(12, 20, 30, 0.9);
+      --accent: #6cf5ff;
+      --warn: #ff8f6c;
+      --text: #e6f3ff;
+      --muted: rgba(230, 243, 255, 0.65);
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(circle at top, #1a2e40, #07111a 60%);
+      font-family: "Segoe UI", system-ui, sans-serif;
+      color: var(--text);
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      box-sizing: border-box;
+    }
+    .shell {
+      width: min(1000px, 96vw);
+      display: grid;
+      gap: 16px;
+    }
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      background: var(--panel);
+      border-radius: 16px;
+      padding: 16px 20px;
+      border: 1px solid rgba(108, 245, 255, 0.2);
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(1.6rem, 2.6vw, 2.4rem);
+    }
+    .stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      font-weight: 600;
+    }
+    .panel {
+      background: var(--panel);
+      border-radius: 16px;
+      padding: 16px 20px;
+      border: 1px solid rgba(108, 245, 255, 0.2);
+    }
+    canvas {
+      width: 100%;
+      background: #05070f;
+      border-radius: 16px;
+      border: 1px solid rgba(108, 245, 255, 0.2);
+      display: block;
+    }
+    .overlay {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      background: rgba(4, 8, 20, 0.76);
+      color: var(--text);
+      text-align: center;
+      padding: 20px;
+    }
+    .overlay.hidden {
+      display: none;
+    }
+    .overlay .card {
+      background: rgba(10, 16, 30, 0.9);
+      border-radius: 16px;
+      padding: 20px 26px;
+      border: 1px solid rgba(108, 245, 255, 0.3);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
+    }
+    button {
+      border: none;
+      border-radius: 999px;
+      padding: 10px 18px;
+      font-weight: 700;
+      cursor: pointer;
+      background: var(--accent);
+      color: #031018;
+    }
+    .hint {
+      color: var(--muted);
+      margin-top: 8px;
+    }
+    .highscores ol {
+      margin: 0;
+      padding-left: 20px;
+    }
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    .game-wrap {
+      position: relative;
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div>
+        <h1>Ski Slalom Sprint</h1>
+        <div class="hint">Carve left and right to avoid the trees.</div>
+      </div>
+      <div class="stats">
+        <div>Speed: <span id="speed">0</span> km/h</div>
+        <div>Distance: <span id="distance">0</span> m</div>
+        <div>Best: <span id="best">0</span> m</div>
+      </div>
+    </header>
+
+    <div class="game-wrap">
+      <canvas id="game" width="960" height="540" aria-label="Ski slalom game"></canvas>
+      <div class="overlay" id="overlay">
+        <div class="card">
+          <h2 id="overlay-title">Ready?</h2>
+          <p id="overlay-text">Press Start to hit the slope.</p>
+          <button id="start-btn">Start</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel highscores">
+      <h3>Top Distances</h3>
+      <ol id="highscore-list"></ol>
+    </div>
+
+    <div class="panel">
+      <a href="../../index.html">Back to games list</a>
+    </div>
+  </div>
+
+  <script src="../../libs/core.js"></script>
+  <script src="../../libs/prefs.js"></script>
+  <script src="../../libs/themes.js"></script>
+  <script src="../../libs/debug.js"></script>
+  <script src="../../libs/highscores.js"></script>
+  <script src="../../libs/ui.js"></script>
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+    const speedEl = document.getElementById("speed");
+    const distanceEl = document.getElementById("distance");
+    const bestEl = document.getElementById("best");
+    const overlay = document.getElementById("overlay");
+    const overlayTitle = document.getElementById("overlay-title");
+    const overlayText = document.getElementById("overlay-text");
+    const startBtn = document.getElementById("start-btn");
+    const highscoreList = document.getElementById("highscore-list");
+
+    const gameId = "ski-slalom";
+
+    const slope = {
+      left: 150,
+      right: canvas.width - 150,
+      top: 40,
+      bottom: canvas.height + 40,
+    };
+
+    const state = {
+      running: false,
+      speed: 0,
+      distance: 0,
+      best: 0,
+      trees: [],
+      spawnTimer: 0,
+      lastTime: 0,
+      nextSide: 1,
+      keys: new Set(),
+    };
+
+    const skier = {
+      x: canvas.width / 2,
+      y: canvas.height - 120,
+      radius: 12,
+      turnSpeed: 320,
+    };
+
+    HTMLGAMES.themes.applyTheme(HTMLGAMES.themes.getTheme());
+
+    function renderHighscores() {
+      const scores = HTMLGAMES.highscores.top(gameId, 5);
+      highscoreList.innerHTML = "";
+      if (!scores.length) {
+        const empty = document.createElement("li");
+        empty.textContent = "No runs yet.";
+        highscoreList.appendChild(empty);
+      } else {
+        scores.forEach((entry) => {
+          const item = document.createElement("li");
+          item.textContent = `${entry.score} m`;
+          highscoreList.appendChild(item);
+        });
+      }
+      state.best = scores.length ? scores[0].score : 0;
+      bestEl.textContent = state.best;
+    }
+
+    function resetGame() {
+      state.running = false;
+      state.speed = 140;
+      state.distance = 0;
+      state.trees = [];
+      state.spawnTimer = 0;
+      state.nextSide = 1;
+      skier.x = canvas.width / 2;
+      updateHud();
+    }
+
+    function updateHud() {
+      speedEl.textContent = Math.round(state.speed * 0.18);
+      distanceEl.textContent = Math.round(state.distance);
+    }
+
+    function spawnTree() {
+      const width = slope.right - slope.left;
+      const biasX = state.nextSide === 1 ? slope.left + width * 0.3 : slope.left + width * 0.7;
+      const spread = width * 0.22;
+      const x = Math.max(
+        slope.left + 30,
+        Math.min(slope.right - 30, biasX + (Math.random() - 0.5) * spread * 2)
+      );
+      const size = 16 + Math.random() * 10;
+      state.trees.push({ x, y: -40, radius: size, sway: Math.random() * 0.6 + 0.6 });
+      state.nextSide *= -1;
+    }
+
+    function updateTrees(dt) {
+      const fallSpeed = state.speed * 0.85;
+      state.trees.forEach((tree) => {
+        tree.y += fallSpeed * dt;
+        tree.x += Math.sin((tree.y / 60) + tree.sway) * 0.6;
+      });
+      state.trees = state.trees.filter((tree) => tree.y < slope.bottom + 60);
+    }
+
+    function checkCollision() {
+      return state.trees.some((tree) => {
+        const dx = tree.x - skier.x;
+        const dy = tree.y - skier.y;
+        const dist = Math.hypot(dx, dy);
+        return dist < tree.radius + skier.radius;
+      });
+    }
+
+    function update(dt) {
+      if (!state.running) return;
+
+      const steerLeft = state.keys.has("ArrowLeft") || state.keys.has("a");
+      const steerRight = state.keys.has("ArrowRight") || state.keys.has("d");
+      if (steerLeft) {
+        skier.x -= skier.turnSpeed * dt;
+      }
+      if (steerRight) {
+        skier.x += skier.turnSpeed * dt;
+      }
+      skier.x = Math.max(slope.left + 20, Math.min(slope.right - 20, skier.x));
+
+      state.speed = Math.min(state.speed + 28 * dt, 420);
+      state.distance += state.speed * dt * 0.18;
+
+      state.spawnTimer -= dt;
+      if (state.spawnTimer <= 0) {
+        spawnTree();
+        state.spawnTimer = Math.max(0.45, 1.1 - state.speed / 520);
+      }
+
+      updateTrees(dt);
+
+      if (checkCollision()) {
+        endGame();
+        return;
+      }
+
+      updateHud();
+    }
+
+    function renderBackground() {
+      const sky = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      sky.addColorStop(0, "#0e2b45");
+      sky.addColorStop(1, "#04111a");
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = "rgba(255, 255, 255, 0.08)";
+      for (let i = 0; i < 80; i += 1) {
+        ctx.fillRect((i * 47) % canvas.width, (i * 73) % canvas.height, 3, 3);
+      }
+    }
+
+    function renderSlope() {
+      ctx.fillStyle = "#d7e8f4";
+      ctx.beginPath();
+      ctx.moveTo(slope.left - 40, slope.top);
+      ctx.lineTo(slope.right + 40, slope.top);
+      ctx.lineTo(slope.right - 30, canvas.height + 80);
+      ctx.lineTo(slope.left + 30, canvas.height + 80);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = "#b9d2e4";
+      ctx.fillRect(slope.left - 40, slope.top, 40, canvas.height + 80);
+      ctx.fillRect(slope.right, slope.top, 40, canvas.height + 80);
+    }
+
+    function renderTrees() {
+      state.trees.forEach((tree) => {
+        ctx.fillStyle = "#0c402b";
+        ctx.beginPath();
+        ctx.arc(tree.x, tree.y, tree.radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "#5b3a1e";
+        ctx.fillRect(tree.x - 3, tree.y + tree.radius - 2, 6, tree.radius * 0.9);
+      });
+    }
+
+    function renderSkier() {
+      ctx.save();
+      ctx.translate(skier.x, skier.y);
+      ctx.fillStyle = "#6cf5ff";
+      ctx.beginPath();
+      ctx.moveTo(0, -18);
+      ctx.lineTo(-12, 14);
+      ctx.lineTo(12, 14);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = "#f7c948";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(-16, 18);
+      ctx.lineTo(16, 18);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function render() {
+      renderBackground();
+      renderSlope();
+      renderTrees();
+      renderSkier();
+    }
+
+    function loop(timestamp) {
+      const dt = Math.min((timestamp - state.lastTime) / 1000, 0.05);
+      state.lastTime = timestamp;
+      update(dt);
+      render();
+      requestAnimationFrame(loop);
+    }
+
+    function startGame() {
+      state.running = true;
+      overlay.classList.add("hidden");
+      state.lastTime = performance.now();
+    }
+
+    function endGame() {
+      state.running = false;
+      const score = Math.round(state.distance);
+      HTMLGAMES.highscores.submit(gameId, score);
+      renderHighscores();
+      overlayTitle.textContent = "Tree hit!";
+      overlayText.textContent = `You carved ${score} m.`;
+      startBtn.textContent = "Run Again";
+      overlay.classList.remove("hidden");
+    }
+
+    document.addEventListener("keydown", (event) => {
+      if (["ArrowLeft", "ArrowRight", "a", "d"].includes(event.key)) {
+        event.preventDefault();
+      }
+      state.keys.add(event.key);
+    });
+
+    document.addEventListener("keyup", (event) => {
+      state.keys.delete(event.key);
+    });
+
+    startBtn.addEventListener("click", () => {
+      resetGame();
+      renderHighscores();
+      startGame();
+      overlayTitle.textContent = "Ready?";
+      overlayText.textContent = "Use Left or Right to carve around trees.";
+      startBtn.textContent = "Restart";
+    });
+
+    renderHighscores();
+    resetGame();
+    render();
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>

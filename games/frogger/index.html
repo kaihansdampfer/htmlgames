@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Frogger Run - HTML Game</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #061218;
+      --panel: rgba(12, 20, 30, 0.9);
+      --accent: #6cf5ff;
+      --warn: #ff8f6c;
+      --text: #e6f3ff;
+      --muted: rgba(230, 243, 255, 0.65);
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(circle at top, #18303f, #061218 60%);
+      font-family: "Segoe UI", system-ui, sans-serif;
+      color: var(--text);
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      box-sizing: border-box;
+    }
+    .shell {
+      width: min(1000px, 96vw);
+      display: grid;
+      gap: 16px;
+    }
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      background: var(--panel);
+      border-radius: 16px;
+      padding: 16px 20px;
+      border: 1px solid rgba(108, 245, 255, 0.2);
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(1.6rem, 2.6vw, 2.4rem);
+    }
+    .stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      font-weight: 600;
+    }
+    .panel {
+      background: var(--panel);
+      border-radius: 16px;
+      padding: 16px 20px;
+      border: 1px solid rgba(108, 245, 255, 0.2);
+    }
+    canvas {
+      width: 100%;
+      background: #0a141b;
+      border-radius: 16px;
+      border: 1px solid rgba(108, 245, 255, 0.2);
+      display: block;
+    }
+    .overlay {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      background: rgba(4, 8, 20, 0.76);
+      color: var(--text);
+      text-align: center;
+      padding: 20px;
+    }
+    .overlay.hidden {
+      display: none;
+    }
+    .overlay .card {
+      background: rgba(10, 16, 30, 0.9);
+      border-radius: 16px;
+      padding: 20px 26px;
+      border: 1px solid rgba(108, 245, 255, 0.3);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
+    }
+    button {
+      border: none;
+      border-radius: 999px;
+      padding: 10px 18px;
+      font-weight: 700;
+      cursor: pointer;
+      background: var(--accent);
+      color: #031018;
+    }
+    .hint {
+      color: var(--muted);
+      margin-top: 8px;
+    }
+    .highscores ol {
+      margin: 0;
+      padding-left: 20px;
+    }
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    .game-wrap {
+      position: relative;
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div>
+        <h1>Frogger Run</h1>
+        <div class="hint">Hop across traffic and ride the logs to safety.</div>
+      </div>
+      <div class="stats">
+        <div>Score: <span id="score">0</span></div>
+        <div>Best: <span id="best">0</span></div>
+        <div>Lives: <span id="lives">3</span></div>
+      </div>
+    </header>
+
+    <div class="game-wrap">
+      <canvas id="game" width="672" height="624" aria-label="Frogger game"></canvas>
+      <div class="overlay" id="overlay">
+        <div class="card">
+          <h2 id="overlay-title">Ready?</h2>
+          <p id="overlay-text">Press Start to hop in.</p>
+          <button id="start-btn">Start</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel highscores">
+      <h3>Top Scores</h3>
+      <ol id="highscore-list"></ol>
+    </div>
+
+    <div class="panel">
+      <a href="../../index.html">Back to games list</a>
+    </div>
+  </div>
+
+  <script src="../../libs/core.js"></script>
+  <script src="../../libs/prefs.js"></script>
+  <script src="../../libs/themes.js"></script>
+  <script src="../../libs/debug.js"></script>
+  <script src="../../libs/highscores.js"></script>
+  <script src="../../libs/ui.js"></script>
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+    const scoreEl = document.getElementById("score");
+    const bestEl = document.getElementById("best");
+    const livesEl = document.getElementById("lives");
+    const overlay = document.getElementById("overlay");
+    const overlayTitle = document.getElementById("overlay-title");
+    const overlayText = document.getElementById("overlay-text");
+    const startBtn = document.getElementById("start-btn");
+    const highscoreList = document.getElementById("highscore-list");
+
+    const gameId = "frogger";
+    const cell = 48;
+    const cols = canvas.width / cell;
+    const rows = canvas.height / cell;
+
+    const state = {
+      running: false,
+      score: 0,
+      best: 0,
+      lives: 3,
+      lanes: [],
+      player: { row: rows - 1, col: Math.floor(cols / 2) },
+      lastTime: 0,
+    };
+
+    HTMLGAMES.themes.applyTheme(HTMLGAMES.themes.getTheme());
+
+    function renderHighscores() {
+      const scores = HTMLGAMES.highscores.top(gameId, 5);
+      highscoreList.innerHTML = "";
+      if (!scores.length) {
+        const empty = document.createElement("li");
+        empty.textContent = "No scores yet.";
+        highscoreList.appendChild(empty);
+      } else {
+        scores.forEach((entry) => {
+          const item = document.createElement("li");
+          item.textContent = `${entry.score} pts`;
+          highscoreList.appendChild(item);
+        });
+      }
+      state.best = scores.length ? scores[0].score : 0;
+      bestEl.textContent = state.best;
+    }
+
+    function createLane(row, type, speed, direction, count, size) {
+      const items = [];
+      for (let i = 0; i < count; i += 1) {
+        items.push({
+          x: (i * (canvas.width / count)) + Math.random() * cell,
+          width: size,
+        });
+      }
+      return { row, type, speed, direction, items };
+    }
+
+    function setupLanes() {
+      state.lanes = [
+        { row: 0, type: "goal" },
+        createLane(1, "water", 0.7, 1, 3, cell * 2.2),
+        createLane(2, "water", 1.1, -1, 2, cell * 2.8),
+        createLane(3, "water", 0.9, 1, 3, cell * 2.0),
+        { row: 4, type: "safe" },
+        createLane(5, "road", 1.6, -1, 3, cell * 1.6),
+        createLane(6, "road", 1.1, 1, 2, cell * 2.2),
+        createLane(7, "road", 1.9, -1, 3, cell * 1.4),
+        { row: 8, type: "safe" },
+        createLane(9, "road", 1.3, 1, 2, cell * 2.0),
+        createLane(10, "road", 1.7, -1, 3, cell * 1.5),
+        { row: 11, type: "safe" },
+        { row: 12, type: "start" },
+      ];
+    }
+
+    function resetPlayer() {
+      state.player.row = rows - 1;
+      state.player.col = Math.floor(cols / 2);
+    }
+
+    function resetGame() {
+      state.score = 0;
+      state.lives = 3;
+      setupLanes();
+      resetPlayer();
+      updateHud();
+    }
+
+    function updateHud() {
+      scoreEl.textContent = state.score;
+      livesEl.textContent = state.lives;
+    }
+
+    function laneForRow(row) {
+      return state.lanes.find((lane) => lane.row === row);
+    }
+
+    function updateLanes(dt) {
+      state.lanes.forEach((lane) => {
+        if (!lane.items) return;
+        lane.items.forEach((item) => {
+          item.x += lane.speed * lane.direction * dt * 60;
+          if (lane.direction === 1 && item.x - item.width / 2 > canvas.width + cell) {
+            item.x = -item.width;
+          }
+          if (lane.direction === -1 && item.x + item.width / 2 < -cell) {
+            item.x = canvas.width + item.width;
+          }
+        });
+      });
+    }
+
+    function isOnItem(lane, playerX) {
+      if (!lane || !lane.items) return false;
+      return lane.items.some((item) => playerX > item.x - item.width / 2 && playerX < item.x + item.width / 2);
+    }
+
+    function checkCollisions() {
+      const lane = laneForRow(state.player.row);
+      const playerX = state.player.col * cell + cell / 2;
+
+      if (lane?.type === "road") {
+        const hit = isOnItem(lane, playerX);
+        if (hit) {
+          loseLife();
+        }
+      }
+
+      if (lane?.type === "water") {
+        const onLog = isOnItem(lane, playerX);
+        if (!onLog) {
+          loseLife();
+        }
+      }
+    }
+
+    function updateRide(dt) {
+      const lane = laneForRow(state.player.row);
+      if (lane?.type === "water") {
+        const playerX = state.player.col * cell + cell / 2;
+        const ride = lane.items.find((item) => playerX > item.x - item.width / 2 && playerX < item.x + item.width / 2);
+        if (ride) {
+          const offset = (lane.speed * lane.direction * dt * 60) / cell;
+          state.player.col += offset;
+          if (state.player.col < 0 || state.player.col > cols - 1) {
+            loseLife();
+          }
+        }
+      }
+    }
+
+    function loseLife() {
+      state.lives -= 1;
+      updateHud();
+      if (state.lives <= 0) {
+        endGame();
+      } else {
+        resetPlayer();
+      }
+    }
+
+    function reachGoal() {
+      state.score += 100;
+      updateHud();
+      resetPlayer();
+    }
+
+    function update(dt) {
+      if (!state.running) return;
+      updateLanes(dt);
+      updateRide(dt);
+      checkCollisions();
+
+      if (state.player.row === 0) {
+        reachGoal();
+      }
+    }
+
+    function renderLanes() {
+      state.lanes.forEach((lane) => {
+        const y = lane.row * cell;
+        if (lane.type === "water") {
+          ctx.fillStyle = "#0b3c50";
+        } else if (lane.type === "road") {
+          ctx.fillStyle = "#1b1f2a";
+        } else if (lane.type === "goal") {
+          ctx.fillStyle = "#163c2e";
+        } else {
+          ctx.fillStyle = "#112027";
+        }
+        ctx.fillRect(0, y, canvas.width, cell);
+      });
+    }
+
+    function renderItems() {
+      state.lanes.forEach((lane) => {
+        if (!lane.items) return;
+        const y = lane.row * cell + cell / 2;
+        if (lane.type === "water") {
+          ctx.fillStyle = "#8ad1ff";
+        } else {
+          ctx.fillStyle = "#ff8f6c";
+        }
+        lane.items.forEach((item) => {
+          ctx.fillRect(item.x - item.width / 2, y - cell * 0.3, item.width, cell * 0.6);
+        });
+      });
+    }
+
+    function renderPlayer() {
+      const x = state.player.col * cell + cell / 2;
+      const y = state.player.row * cell + cell / 2;
+      ctx.fillStyle = "#6cf5ff";
+      ctx.beginPath();
+      ctx.arc(x, y, cell * 0.28, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#052028";
+      ctx.beginPath();
+      ctx.arc(x - 6, y - 4, 3, 0, Math.PI * 2);
+      ctx.arc(x + 6, y - 4, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function render() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      renderLanes();
+      renderItems();
+      renderPlayer();
+    }
+
+    function loop(timestamp) {
+      const dt = Math.min((timestamp - state.lastTime) / 1000, 0.05);
+      state.lastTime = timestamp;
+      update(dt);
+      render();
+      requestAnimationFrame(loop);
+    }
+
+    function startGame() {
+      state.running = true;
+      overlay.classList.add("hidden");
+      state.lastTime = performance.now();
+    }
+
+    function endGame() {
+      state.running = false;
+      HTMLGAMES.highscores.submit(gameId, state.score);
+      renderHighscores();
+      overlayTitle.textContent = "Game Over";
+      overlayText.textContent = `You scored ${state.score} points.`;
+      startBtn.textContent = "Play Again";
+      overlay.classList.remove("hidden");
+    }
+
+    document.addEventListener("keydown", (event) => {
+      if (!state.running) return;
+      if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "w", "a", "s", "d"].includes(event.key)) {
+        event.preventDefault();
+      }
+      if (event.key === "ArrowUp" || event.key === "w") {
+        state.player.row = Math.max(0, state.player.row - 1);
+      }
+      if (event.key === "ArrowDown" || event.key === "s") {
+        state.player.row = Math.min(rows - 1, state.player.row + 1);
+      }
+      if (event.key === "ArrowLeft" || event.key === "a") {
+        state.player.col = Math.max(0, state.player.col - 1);
+      }
+      if (event.key === "ArrowRight" || event.key === "d") {
+        state.player.col = Math.min(cols - 1, state.player.col + 1);
+      }
+    });
+
+    startBtn.addEventListener("click", () => {
+      resetGame();
+      renderHighscores();
+      startGame();
+      overlayTitle.textContent = "Ready?";
+      overlayText.textContent = "Use arrow keys or WASD to hop.";
+      startBtn.textContent = "Restart";
+    });
+
+    renderHighscores();
+    resetGame();
+    render();
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>

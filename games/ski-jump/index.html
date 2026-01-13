@@ -1,0 +1,479 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ski Jump Classic - HTML Game</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #06111a;
+      --panel: rgba(12, 20, 30, 0.9);
+      --accent: #6cf5ff;
+      --warn: #ff8f6c;
+      --text: #e6f3ff;
+      --muted: rgba(230, 243, 255, 0.65);
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(circle at top, #1b2f3f, #06111a 60%);
+      font-family: "Segoe UI", system-ui, sans-serif;
+      color: var(--text);
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      box-sizing: border-box;
+    }
+    .shell {
+      width: min(1000px, 96vw);
+      display: grid;
+      gap: 16px;
+    }
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      background: var(--panel);
+      border-radius: 16px;
+      padding: 16px 20px;
+      border: 1px solid rgba(108, 245, 255, 0.2);
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(1.6rem, 2.6vw, 2.4rem);
+    }
+    .stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      font-weight: 600;
+    }
+    .panel {
+      background: var(--panel);
+      border-radius: 16px;
+      padding: 16px 20px;
+      border: 1px solid rgba(108, 245, 255, 0.2);
+    }
+    canvas {
+      width: 100%;
+      background: #05070f;
+      border-radius: 16px;
+      border: 1px solid rgba(108, 245, 255, 0.2);
+      display: block;
+    }
+    .overlay {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      background: rgba(4, 8, 20, 0.76);
+      color: var(--text);
+      text-align: center;
+      padding: 20px;
+    }
+    .overlay.hidden {
+      display: none;
+    }
+    .overlay .card {
+      background: rgba(10, 16, 30, 0.9);
+      border-radius: 16px;
+      padding: 20px 26px;
+      border: 1px solid rgba(108, 245, 255, 0.3);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
+    }
+    button {
+      border: none;
+      border-radius: 999px;
+      padding: 10px 18px;
+      font-weight: 700;
+      cursor: pointer;
+      background: var(--accent);
+      color: #031018;
+    }
+    .hint {
+      color: var(--muted);
+      margin-top: 8px;
+    }
+    .highscores ol {
+      margin: 0;
+      padding-left: 20px;
+    }
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    .game-wrap {
+      position: relative;
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div>
+        <h1>Ski Jump Classic</h1>
+        <div class="hint">Build speed down the ramp, time the takeoff, then land clean.</div>
+      </div>
+      <div class="stats">
+        <div>Speed: <span id="speed">0</span> km/h</div>
+        <div>Distance: <span id="distance">0</span> m</div>
+        <div>Best: <span id="best">0</span> m</div>
+        <div>Wind: <span id="wind">0</span> m/s</div>
+      </div>
+    </header>
+
+    <div class="game-wrap">
+      <canvas id="game" width="960" height="540" aria-label="Ski jump game"></canvas>
+      <div class="overlay" id="overlay">
+        <div class="card">
+          <h2 id="overlay-title">Ready?</h2>
+          <p id="overlay-text">Press Start to ski the ramp.</p>
+          <button id="start-btn">Start</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel highscores">
+      <h3>Top Distances</h3>
+      <ol id="highscore-list"></ol>
+    </div>
+
+    <div class="panel">
+      <a href="../../index.html">Back to games list</a>
+    </div>
+  </div>
+
+  <script src="../../libs/core.js"></script>
+  <script src="../../libs/prefs.js"></script>
+  <script src="../../libs/themes.js"></script>
+  <script src="../../libs/debug.js"></script>
+  <script src="../../libs/highscores.js"></script>
+  <script src="../../libs/ui.js"></script>
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+    const speedEl = document.getElementById("speed");
+    const distanceEl = document.getElementById("distance");
+    const bestEl = document.getElementById("best");
+    const windEl = document.getElementById("wind");
+    const overlay = document.getElementById("overlay");
+    const overlayTitle = document.getElementById("overlay-title");
+    const overlayText = document.getElementById("overlay-text");
+    const startBtn = document.getElementById("start-btn");
+    const highscoreList = document.getElementById("highscore-list");
+
+    const gameId = "ski-jump";
+
+    const rampStart = { x: 140, y: 120 };
+    const rampEnd = { x: 460, y: 260 };
+    const rampVector = { x: rampEnd.x - rampStart.x, y: rampEnd.y - rampStart.y };
+    const rampLength = Math.hypot(rampVector.x, rampVector.y);
+    const rampAngle = Math.atan2(rampVector.y, rampVector.x);
+
+    const state = {
+      running: false,
+      phase: "idle",
+      t: 0,
+      x: rampStart.x,
+      y: rampStart.y,
+      speed: 0,
+      vx: 0,
+      vy: 0,
+      distance: 0,
+      score: 0,
+      best: 0,
+      wind: 0,
+      lastTime: 0,
+      jumpMark: null,
+      landingDiff: 0,
+      keys: new Set(),
+    };
+
+    HTMLGAMES.themes.applyTheme(HTMLGAMES.themes.getTheme());
+
+    function hillY(x) {
+      const dx = Math.max(0, x - rampEnd.x);
+      return rampEnd.y + dx * 0.3 + dx * dx * 0.0006;
+    }
+
+    function hillSlope(x) {
+      const dx = Math.max(0, x - rampEnd.x);
+      return 0.3 + dx * 0.0012;
+    }
+
+    function renderHighscores() {
+      const scores = HTMLGAMES.highscores.top(gameId, 5);
+      highscoreList.innerHTML = "";
+      if (!scores.length) {
+        const empty = document.createElement("li");
+        empty.textContent = "No jumps yet.";
+        highscoreList.appendChild(empty);
+      } else {
+        scores.forEach((entry) => {
+          const item = document.createElement("li");
+          item.textContent = `${entry.score} m`;
+          highscoreList.appendChild(item);
+        });
+      }
+      state.best = scores.length ? scores[0].score : 0;
+      bestEl.textContent = state.best;
+    }
+
+    function resetGame() {
+      state.running = false;
+      state.phase = "approach";
+      state.t = 0;
+      state.speed = 0;
+      state.vx = 0;
+      state.vy = 0;
+      state.distance = 0;
+      state.score = 0;
+      state.x = rampStart.x;
+      state.y = rampStart.y;
+      state.jumpMark = null;
+      state.landingDiff = 0;
+      state.wind = (Math.random() * 2 - 1) * 2.4;
+      windEl.textContent = state.wind.toFixed(1);
+      updateHud();
+    }
+
+    function updateHud() {
+      const speed = state.phase === "flight" ? Math.hypot(state.vx, state.vy) : state.speed;
+      speedEl.textContent = Math.max(0, Math.round(speed * 0.12));
+      distanceEl.textContent = Math.max(0, Math.round(state.distance));
+    }
+
+    function updateApproach(dt) {
+      const tucked = state.keys.has("ArrowDown") || state.keys.has("s");
+      const accel = 240 + (tucked ? 160 : 0);
+      state.speed = Math.min(state.speed + accel * dt, 820);
+      state.t = Math.min(1, state.t + (state.speed * dt) / rampLength);
+      state.x = rampStart.x + rampVector.x * state.t;
+      state.y = rampStart.y + rampVector.y * state.t;
+
+      if (state.t >= 1) {
+        const quality = state.jumpMark === null ? 0 : Math.max(0, 1 - Math.abs(1 - state.jumpMark) / 0.2);
+        const takeoffAngle = Math.max(-0.6, -0.12 - quality * 0.35);
+        const takeoffSpeed = state.speed * (1 + quality * 0.12);
+        state.vx = Math.cos(takeoffAngle) * takeoffSpeed;
+        state.vy = Math.sin(takeoffAngle) * takeoffSpeed;
+        state.phase = "flight";
+      }
+    }
+
+    function updateFlight(dt) {
+      const lift = 160;
+      if (state.keys.has("ArrowUp") || state.keys.has("w")) {
+        state.vy -= lift * dt;
+      }
+      if (state.keys.has("ArrowDown") || state.keys.has("s")) {
+        state.vy += lift * dt;
+      }
+
+      state.vx += state.wind * 35 * dt;
+      state.vy += 380 * dt;
+
+      state.x += state.vx * dt;
+      state.y += state.vy * dt;
+      state.distance = Math.max(0, (state.x - rampEnd.x) / 5);
+
+      const groundY = hillY(state.x);
+      if (state.y >= groundY) {
+        const slope = hillSlope(state.x);
+        const slopeAngle = Math.atan(slope);
+        const velocityAngle = Math.atan2(state.vy, state.vx);
+        const diff = Math.abs(velocityAngle - slopeAngle);
+        const softLanding = diff < 0.35 && state.vy < 540;
+        state.landingDiff = diff;
+        if (softLanding) {
+          landJump();
+        } else {
+          crashJump();
+        }
+      }
+    }
+
+    function landJump() {
+      state.phase = "landed";
+      state.running = false;
+      const distanceScore = Math.round(state.distance);
+      const styleBonus = Math.max(0, Math.round(14 - state.landingDiff * 24));
+      state.score = distanceScore + styleBonus;
+      HTMLGAMES.highscores.submit(gameId, state.score);
+      renderHighscores();
+      overlayTitle.textContent = "Solid landing!";
+      overlayText.textContent = `Distance ${Math.round(state.distance)} m, bonus ${styleBonus} m.`;
+      startBtn.textContent = "Jump Again";
+      overlay.classList.remove("hidden");
+    }
+
+    function crashJump() {
+      state.phase = "crash";
+      state.running = false;
+      state.score = Math.max(0, Math.round(state.distance * 0.6));
+      HTMLGAMES.highscores.submit(gameId, state.score);
+      renderHighscores();
+      overlayTitle.textContent = "Crash landing";
+      overlayText.textContent = `Distance ${Math.round(state.distance)} m. Try a smoother pitch.`;
+      startBtn.textContent = "Try Again";
+      overlay.classList.remove("hidden");
+    }
+
+    function update(dt) {
+      if (!state.running) return;
+      if (state.phase === "approach") {
+        updateApproach(dt);
+      } else if (state.phase === "flight") {
+        updateFlight(dt);
+      }
+      updateHud();
+    }
+
+    function renderBackground() {
+      const sky = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      sky.addColorStop(0, "#0e2a45");
+      sky.addColorStop(1, "#031018");
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = "rgba(255, 255, 255, 0.08)";
+      for (let i = 0; i < 90; i += 1) {
+        ctx.fillRect((i * 43) % canvas.width, (i * 71) % canvas.height, 3, 3);
+      }
+
+      ctx.fillStyle = "#122536";
+      ctx.beginPath();
+      ctx.moveTo(0, 220);
+      ctx.lineTo(180, 120);
+      ctx.lineTo(380, 240);
+      ctx.lineTo(0, 300);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function renderRamp() {
+      ctx.fillStyle = "#dcecf8";
+      ctx.beginPath();
+      ctx.moveTo(rampStart.x - 20, rampStart.y - 20);
+      ctx.lineTo(rampEnd.x + 20, rampEnd.y - 20);
+      ctx.lineTo(rampEnd.x + 20, rampEnd.y + 30);
+      ctx.lineTo(rampStart.x - 20, rampStart.y + 30);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = "#b8d4ea";
+      ctx.fillRect(rampEnd.x - 8, rampEnd.y - 30, 16, 60);
+    }
+
+    function renderHill() {
+      ctx.fillStyle = "#d5e7f2";
+      ctx.beginPath();
+      ctx.moveTo(rampEnd.x, rampEnd.y + 40);
+      for (let x = rampEnd.x; x <= canvas.width + 20; x += 24) {
+        ctx.lineTo(x, hillY(x));
+      }
+      ctx.lineTo(canvas.width + 20, canvas.height + 40);
+      ctx.lineTo(rampEnd.x, canvas.height + 40);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function renderMarkers() {
+      ctx.strokeStyle = "rgba(255, 143, 108, 0.9)";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(rampEnd.x, rampEnd.y - 30);
+      ctx.lineTo(rampEnd.x, rampEnd.y + 40);
+      ctx.stroke();
+
+      ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
+      for (let i = 1; i <= 5; i += 1) {
+        const x = rampEnd.x + i * 80;
+        const y = hillY(x);
+        ctx.fillRect(x - 10, y - 4, 20, 4);
+      }
+    }
+
+    function renderSkier(x, y, angle) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(angle);
+      ctx.strokeStyle = "#f7c948";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(-14, 6);
+      ctx.lineTo(14, 6);
+      ctx.stroke();
+
+      ctx.strokeStyle = "#6cf5ff";
+      ctx.beginPath();
+      ctx.moveTo(0, -4);
+      ctx.lineTo(0, 8);
+      ctx.stroke();
+
+      ctx.fillStyle = "#e6f3ff";
+      ctx.beginPath();
+      ctx.arc(0, -8, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function render() {
+      renderBackground();
+      renderHill();
+      renderRamp();
+      renderMarkers();
+
+      let angle = rampAngle;
+      if (state.phase === "flight") {
+        angle = Math.atan2(state.vy, state.vx);
+      }
+      renderSkier(state.x, state.y, angle);
+    }
+
+    function loop(timestamp) {
+      const dt = Math.min((timestamp - state.lastTime) / 1000, 0.05);
+      state.lastTime = timestamp;
+      update(dt);
+      render();
+      requestAnimationFrame(loop);
+    }
+
+    function startGame() {
+      state.running = true;
+      overlay.classList.add("hidden");
+      state.lastTime = performance.now();
+    }
+
+    document.addEventListener("keydown", (event) => {
+      state.keys.add(event.key);
+      if (event.key === " ") {
+        if (state.phase === "approach" && state.jumpMark === null) {
+          state.jumpMark = state.t;
+        }
+      }
+    });
+
+    document.addEventListener("keyup", (event) => {
+      state.keys.delete(event.key);
+    });
+
+    startBtn.addEventListener("click", () => {
+      resetGame();
+      renderHighscores();
+      startGame();
+      overlayTitle.textContent = "Ready?";
+      overlayText.textContent = "Hold Down to tuck, press Space to jump, Up or Down to pitch in flight.";
+      startBtn.textContent = "Restart";
+    });
+
+    renderHighscores();
+    resetGame();
+    render();
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>

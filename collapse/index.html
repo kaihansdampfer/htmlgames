@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Collapse</title>
+<style>
+:root{color-scheme:dark;--bg:#05070f;--panel:rgba(14,18,30,.9);--accent:#6cf5ff;--text:#e6f3ff;--muted:rgba(230,243,255,.65)}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(circle at 20% 15%,rgba(108,245,255,.18),transparent 45%),radial-gradient(circle at 80% 10%,rgba(255,153,102,.16),transparent 45%),var(--bg);color:var(--text);font-family:"Trebuchet MS","Segoe UI",sans-serif}
+.shell{width:min(94vw,940px);display:grid;gap:14px;padding:18px}
+header{display:flex;justify-content:space-between;gap:12px;align-items:center}
+.panel{background:var(--panel);border:1px solid rgba(108,245,255,.25);border-radius:14px;padding:14px}
+.stats{display:grid;grid-auto-flow:column;gap:10px}
+.stat{min-width:110px;text-align:center}
+.stat span{display:block;font-size:.7rem;letter-spacing:.2em;color:var(--muted);text-transform:uppercase}
+.stat strong{font-size:1.2rem}
+.canvas-wrap{position:relative;display:grid;gap:12px}
+canvas{width:100%;height:auto;background:#070910;border:1px solid rgba(108,245,255,.2);border-radius:12px}
+.overlay{position:absolute;inset:0;display:grid;place-items:center;background:rgba(2,4,12,.78);opacity:0;pointer-events:none;transition:opacity .2s ease;border-radius:14px}
+.overlay.show{opacity:1;pointer-events:auto}
+button{margin-top:10px;padding:10px 16px;border-radius:999px;border:none;background:var(--accent);color:#032028;font-weight:700;cursor:pointer}
+.controls{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;color:var(--muted)}
+.link{color:var(--accent);text-decoration:none}
+.legend{display:flex;gap:10px;flex-wrap:wrap;color:var(--muted);font-size:.9rem}
+.legend span{display:flex;gap:6px;align-items:center}
+.legend i{width:14px;height:14px;border-radius:4px;display:inline-block}
+.highscores ol{margin:0;padding-left:20px}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header>
+    <div>
+      <h1>Collapse</h1>
+      <div class="muted">Tap a group of two or more tiles to clear the board.</div>
+    </div>
+    <div class="panel stats">
+      <div class="stat"><span>Score</span><strong id="score">0</strong></div>
+      <div class="stat"><span>Level</span><strong id="level">1</strong></div>
+      <div class="stat"><span>Best</span><strong id="best">0</strong></div>
+    </div>
+  </header>
+
+  <div class="panel canvas-wrap">
+    <canvas id="game" width="860" height="520" aria-label="Collapse board"></canvas>
+    <div class="legend" id="legend"></div>
+    <div class="overlay show" id="overlay">
+      <div class="panel">
+        <h2 id="ot">Clear the clusters</h2>
+        <p id="otx" style="color:var(--muted)">Match at least two tiles to score.</p>
+        <button id="start">Start</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel controls">
+    <span>Click a cluster • Larger groups score more</span>
+    <span><a class="link" href="../index.html">Back to games list</a></span>
+  </div>
+
+  <div class="panel highscores">
+    <h3>Top Scores</h3>
+    <ol id="scores"></ol>
+  </div>
+</div>
+
+<script src="../libs/core.js"></script>
+<script src="../libs/prefs.js"></script>
+<script src="../libs/themes.js"></script>
+<script src="../libs/debug.js"></script>
+<script src="../libs/highscores.js"></script>
+<script src="../libs/ui.js"></script>
+<script>
+const gameId="collapse";
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+const scoreEl=document.getElementById("score");
+const levelEl=document.getElementById("level");
+const bestEl=document.getElementById("best");
+const list=document.getElementById("scores");
+const overlay=document.getElementById("overlay");
+const ot=document.getElementById("ot");
+const otx=document.getElementById("otx");
+const start=document.getElementById("start");
+const legend=document.getElementById("legend");
+const palette=[
+  {name:"Aqua",color:"#6cf5ff"},
+  {name:"Sunset",color:"#ff8f6c"},
+  {name:"Mint",color:"#7cf0c6"},
+  {name:"Gold",color:"#ffd166"}
+];
+const state={
+  cols:14,
+  rows:12,
+  grid:[],
+  score:0,
+  level:1,
+  best:0,
+  running:false,
+  hover:[],
+  cellSize:0,
+  pad:20,
+  origin:{x:0,y:0}
+};
+HTMLGAMES.themes.applyTheme(HTMLGAMES.themes.getTheme());
+
+function renderLegend(){
+  legend.innerHTML="";
+  palette.forEach(item=>{
+    const span=document.createElement("span");
+    const swatch=document.createElement("i");
+    swatch.style.background=item.color;
+    span.appendChild(swatch);
+    span.appendChild(document.createTextNode(item.name));
+    legend.appendChild(span);
+  });
+}
+
+function hs(){
+  const r=HTMLGAMES.highscores.top(gameId,5);
+  list.innerHTML="";
+  if(!r.length){
+    const li=document.createElement("li");
+    li.textContent="No scores yet.";
+    list.appendChild(li);
+  }else{
+    r.forEach(e=>{
+      const li=document.createElement("li");
+      li.textContent=`${e.score} pts`;
+      list.appendChild(li);
+    });
+  }
+  state.best=r.length?r[0].score:0;
+  bestEl.textContent=state.best;
+}
+
+function randomTile(){
+  return Math.floor(Math.random()*palette.length);
+}
+
+function buildGrid(){
+  state.grid=Array.from({length:state.cols},()=>Array.from({length:state.rows},randomTile));
+}
+
+function computeLayout(){
+  const size=Math.min(
+    (canvas.width-2*state.pad)/state.cols,
+    (canvas.height-2*state.pad)/state.rows
+  );
+  state.cellSize=size;
+  state.origin.x=(canvas.width-state.cols*size)/2;
+  state.origin.y=(canvas.height-state.rows*size)/2;
+}
+
+function reset(){
+  state.score=0;
+  state.level=1;
+  buildGrid();
+  scoreEl.textContent=state.score;
+  levelEl.textContent=state.level;
+  computeLayout();
+  state.hover=[];
+}
+
+function floodFill(start){
+  const {x,y}=start;
+  const target=state.grid[x][y];
+  if(target==null)return[];
+  const stack=[[x,y]];
+  const visited=new Set();
+  const group=[];
+  while(stack.length){
+    const [cx,cy]=stack.pop();
+    const key=`${cx},${cy}`;
+    if(visited.has(key))continue;
+    visited.add(key);
+    if(state.grid[cx][cy]!==target)continue;
+    group.push({x:cx,y:cy});
+    if(cx>0)stack.push([cx-1,cy]);
+    if(cx<state.cols-1)stack.push([cx+1,cy]);
+    if(cy>0)stack.push([cx,cy-1]);
+    if(cy<state.rows-1)stack.push([cx,cy+1]);
+  }
+  return group;
+}
+
+function hasMoves(){
+  const visited=new Set();
+  for(let x=0;x<state.cols;x++){
+    for(let y=0;y<state.rows;y++){
+      if(state.grid[x][y]==null)continue;
+      const key=`${x},${y}`;
+      if(visited.has(key))continue;
+      const group=floodFill({x,y});
+      group.forEach(cell=>visited.add(`${cell.x},${cell.y}`));
+      if(group.length>=2)return true;
+    }
+  }
+  return false;
+}
+
+function collapseDown(){
+  for(let x=0;x<state.cols;x++){
+    const column=state.grid[x].filter(v=>v!=null);
+    while(column.length<state.rows)column.push(null);
+    state.grid[x]=column;
+  }
+}
+
+function collapseSides(){
+  const columns=state.grid.filter(col=>col.some(v=>v!=null));
+  const emptyCount=state.cols-columns.length;
+  const startIndex=Math.floor(emptyCount/2);
+  const newGrid=Array.from({length:state.cols},()=>Array(state.rows).fill(null));
+  columns.forEach((col,idx)=>{
+    newGrid[startIndex+idx]=col;
+  });
+  state.grid=newGrid;
+}
+
+function clearGroup(group){
+  group.forEach(cell=>{state.grid[cell.x][cell.y]=null;});
+  const points=group.length*group.length*5;
+  state.score+=points;
+  scoreEl.textContent=state.score;
+  collapseDown();
+  collapseSides();
+}
+
+function nextLevel(){
+  state.level+=1;
+  levelEl.textContent=state.level;
+  buildGrid();
+}
+
+function end(title,text){
+  state.running=false;
+  ot.textContent=title;
+  otx.textContent=text;
+  overlay.classList.add("show");
+  HTMLGAMES.highscores.submit(gameId,state.score);
+  HTMLGAMES.debug.log("Game over",{score:state.score});
+  hs();
+}
+
+function canvasToCell(evt){
+  const rect=canvas.getBoundingClientRect();
+  const x=(evt.clientX-rect.left)*(canvas.width/rect.width);
+  const y=(evt.clientY-rect.top)*(canvas.height/rect.height);
+  const gx=Math.floor((x-state.origin.x)/state.cellSize);
+  const gy=Math.floor((y-state.origin.y)/state.cellSize);
+  if(gx<0||gx>=state.cols||gy<0||gy>=state.rows)return null;
+  return {x:gx,y:state.rows-1-gy};
+}
+
+function updateHover(evt){
+  if(!state.running)return;
+  const cell=canvasToCell(evt);
+  if(!cell||state.grid[cell.x][cell.y]==null){
+    state.hover=[];
+    return;
+  }
+  const group=floodFill(cell);
+  state.hover=group.length>=2?group:[];
+}
+
+function click(evt){
+  if(!state.running)return;
+  const cell=canvasToCell(evt);
+  if(!cell||state.grid[cell.x][cell.y]==null)return;
+  const group=floodFill(cell);
+  if(group.length<2)return;
+  clearGroup(group);
+  if(state.grid.every(col=>col.every(v=>v==null))){
+    nextLevel();
+    return;
+  }
+  if(!hasMoves()){
+    end("No more moves",`Final score: ${state.score}`);
+  }
+}
+
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle="#090c16";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle="rgba(255,255,255,.08)";
+  ctx.fillRect(state.origin.x-6,state.origin.y-6,state.cols*state.cellSize+12,state.rows*state.cellSize+12);
+  const hoverKeys=new Set(state.hover.map(cell=>`${cell.x},${cell.y}`));
+  for(let x=0;x<state.cols;x++){
+    for(let y=0;y<state.rows;y++){
+      const value=state.grid[x][y];
+      if(value==null)continue;
+      const color=palette[value].color;
+      const drawY=state.rows-1-y;
+      const px=state.origin.x+x*state.cellSize;
+      const py=state.origin.y+drawY*state.cellSize;
+      const size=state.cellSize-6;
+      const ox=px+3;
+      const oy=py+3;
+      ctx.fillStyle=color;
+      ctx.fillRect(ox,oy,size,size);
+      if(hoverKeys.has(`${x},${y}`)){
+        ctx.strokeStyle="#ffffff";
+        ctx.lineWidth=2;
+        ctx.strokeRect(ox-2,oy-2,size+4,size+4);
+      }
+    }
+  }
+  if(state.hover.length>=2){
+    const message=`${state.hover.length} tiles → ${state.hover.length*state.hover.length*5} pts`;
+    ctx.fillStyle="rgba(255,255,255,.85)";
+    ctx.font="16px 'Trebuchet MS',sans-serif";
+    ctx.fillText(message,18,26);
+  }
+}
+
+function loop(){
+  if(state.running){
+    draw();
+  }
+  requestAnimationFrame(loop);
+}
+
+function startGame(){
+  reset();
+  overlay.classList.remove("show");
+  state.running=true;
+  if(!hasMoves()){
+    end("No moves",`Final score: ${state.score}`);
+  }
+}
+
+canvas.addEventListener("pointermove",updateHover);
+canvas.addEventListener("pointerleave",()=>{state.hover=[];});
+canvas.addEventListener("pointerdown",click);
+start.addEventListener("click",startGame);
+window.addEventListener("resize",computeLayout);
+
+renderLegend();
+computeLayout();
+hs();
+draw();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

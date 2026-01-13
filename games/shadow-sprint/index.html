@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Shadow Sprint</title>
+<style>
+:root{color-scheme:dark;--bg:#05070f;--panel:rgba(14,18,30,.9);--accent:#9bf36f;--text:#e6f3ff;--muted:rgba(230,243,255,.65);--warn:#ff8f6c}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(circle at 18% 20%,rgba(155,243,111,.18),transparent 45%),radial-gradient(circle at 80% 10%,rgba(108,245,255,.12),transparent 45%),var(--bg);color:var(--text);font-family:"Trebuchet MS","Segoe UI",sans-serif}
+.shell{width:min(94vw,900px);display:grid;gap:14px;padding:18px}
+header{display:flex;justify-content:space-between;gap:12px;align-items:center}
+.panel{background:var(--panel);border:1px solid rgba(155,243,111,.25);border-radius:14px;padding:14px}
+.stats{display:grid;grid-auto-flow:column;gap:10px}
+.stat{min-width:120px;text-align:center}
+.stat span{display:block;font-size:.7rem;letter-spacing:.2em;color:var(--muted);text-transform:uppercase}
+.stat strong{font-size:1.3rem}
+.canvas{background:#070910;border:1px solid rgba(155,243,111,.2);border-radius:12px}
+.meters{display:grid;gap:6px}
+.bar{height:14px;border-radius:999px;border:1px solid rgba(155,243,111,.3);background:rgba(255,255,255,.08);overflow:hidden}
+.fill{height:100%;width:40%;background:linear-gradient(90deg,#9bf36f,#6cf5ff)}
+.hold{background:#101522;border:1px solid rgba(155,243,111,.4);border-radius:12px;padding:10px 14px;text-align:center;text-transform:uppercase;letter-spacing:.05em;cursor:pointer;user-select:none}
+.alert{color:var(--warn);font-weight:700}
+.overlay{position:absolute;inset:0;display:grid;place-items:center;background:rgba(2,4,12,.78);opacity:0;pointer-events:none;transition:opacity .2s ease;border-radius:14px}
+.overlay.show{opacity:1;pointer-events:auto}
+button{margin-top:10px;padding:10px 16px;border-radius:999px;border:none;background:var(--accent);color:#0e1d0e;font-weight:700;cursor:pointer}
+.controls{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;color:var(--muted)}
+.link{color:var(--accent);text-decoration:none}
+.highscores ol{margin:0;padding-left:20px}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header>
+    <div>
+      <h1>Shadow Sprint</h1>
+      <div class="muted">Hold to sprint fast, release to stay quiet.</div>
+    </div>
+    <div class="panel stats">
+      <div class="stat"><span>Distance</span><strong id="score">0</strong></div>
+      <div class="stat"><span>Best</span><strong id="best">0</strong></div>
+    </div>
+  </header>
+
+  <div class="panel" style="position:relative;display:grid;gap:10px">
+    <canvas id="game" width="860" height="220" class="canvas" aria-label="Stealth corridor"></canvas>
+    <div class="meters">
+      <div>Noise</div>
+      <div class="bar"><div class="fill" id="noise"></div></div>
+      <div>Patrol</div>
+      <div class="bar"><div class="fill" id="patrol"></div></div>
+      <div id="patrolText">Patrols idle</div>
+    </div>
+    <div class="hold" id="hold">Hold or Space</div>
+    <div class="overlay show" id="overlay">
+      <div class="panel">
+        <h2 id="ot">Stay in the dark</h2>
+        <p id="otx" style="color:var(--muted)">Sprint for distance. Go quiet during patrols.</p>
+        <button id="start">Start</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel controls">
+    <span>Hold to sprint, release to hide</span>
+    <span><a class="link" href="../../index.html">Back to games list</a></span>
+  </div>
+
+  <div class="panel highscores">
+    <h3>Top Scores</h3>
+    <ol id="scores"></ol>
+  </div>
+</div>
+
+<script src="../../libs/core.js"></script>
+<script src="../../libs/prefs.js"></script>
+<script src="../../libs/themes.js"></script>
+<script src="../../libs/debug.js"></script>
+<script src="../../libs/highscores.js"></script>
+<script src="../../libs/ui.js"></script>
+<script>
+const gameId="shadow-sprint";
+const c=document.getElementById("game");
+const g=c.getContext("2d");
+const scoreEl=document.getElementById("score");
+const bestEl=document.getElementById("best");
+const noiseEl=document.getElementById("noise");
+const patrolEl=document.getElementById("patrol");
+const patrolText=document.getElementById("patrolText");
+const list=document.getElementById("scores");
+const overlay=document.getElementById("overlay");
+const ot=document.getElementById("ot");
+const otx=document.getElementById("otx");
+const start=document.getElementById("start");
+const hold=document.getElementById("hold");
+const s={run:false,press:false,t:0,dist:0,noise:.1,pat:{at:5,dur:2.5,act:false},best:0,last:0};
+HTMLGAMES.themes.applyTheme(HTMLGAMES.themes.getTheme());
+function hs(){const r=HTMLGAMES.highscores.top(gameId,5);list.innerHTML="";if(!r.length){const li=document.createElement("li");li.textContent="No scores yet.";list.appendChild(li);}else{r.forEach(e=>{const li=document.createElement("li");li.textContent=`${e.score} m`;list.appendChild(li);});}s.best=r.length?r[0].score:0;bestEl.textContent=s.best;}
+function reset(){s.t=0;s.dist=0;s.noise=.1;s.pat={at:5,dur:2.5,act:false};scoreEl.textContent=0;patrolText.textContent="Patrols idle";patrolText.classList.remove("alert");bars();}
+function bars(){noiseEl.style.width=Math.min(100,s.noise*100)+"%";const p=s.pat.act?Math.min(1,(s.t-s.pat.at)/s.pat.dur):Math.min(1,s.t/s.pat.at);patrolEl.style.width=p*100+"%";}
+function schedule(){const gap=5+Math.random()*4;s.pat={at:s.t+gap,dur:2+Math.random()*1.2,act:false};}
+function update(dt){s.t+=dt;const speed=s.press?7.5:3;s.dist+=speed*dt;scoreEl.textContent=Math.floor(s.dist);s.noise=s.press?Math.min(1,s.noise+dt*.4):Math.max(0,s.noise-dt*.35);
+if(!s.pat.act&&s.t>=s.pat.at){s.pat.act=true;patrolText.textContent="Patrol sweeping";patrolText.classList.add("alert");}
+if(s.pat.act){if(s.noise>.35){end("Caught in the light",`Distance: ${Math.floor(s.dist)} m`);return;}if(s.t>=s.pat.at+s.pat.dur){patrolText.textContent="Patrol cleared";patrolText.classList.remove("alert");schedule();}}
+if(s.dist>=120)end("Escaped!",`Distance: ${Math.floor(s.dist)} m`);bars();}
+function draw(){g.fillStyle="#05060d";g.fillRect(0,0,c.width,c.height);g.fillStyle="rgba(155,243,111,.15)";g.fillRect(0,c.height*.35,c.width,c.height*.3);const p=Math.min(1,s.dist/120);const x=40+p*(c.width-80);g.fillStyle="#9bf36f";g.beginPath();g.arc(x,c.height/2,12,0,Math.PI*2);g.fill();g.fillStyle="rgba(255,255,255,.7)";g.font="12px 'Trebuchet MS',sans-serif";g.fillText(`Noise: ${Math.round(s.noise*100)}%`,12,18);}
+function loop(ts){if(!s.run)return;const dt=Math.min(.05,(ts-s.last)/1000||.016);s.last=ts;update(dt);draw();requestAnimationFrame(loop);}
+function startGame(){reset();overlay.classList.remove("show");s.run=true;s.last=performance.now();requestAnimationFrame(loop);}
+function end(title,text){s.run=false;ot.textContent=title;otx.textContent=text;overlay.classList.add("show");HTMLGAMES.highscores.submit(gameId,Math.floor(s.dist));HTMLGAMES.debug.log("Game over",{score:Math.floor(s.dist)});hs();}
+function setPress(v){s.press=v;hold.style.background=v?"rgba(155,243,111,.2)":"#101522";}
+hold.addEventListener("pointerdown",e=>{e.preventDefault();setPress(true);});
+["pointerup","pointerleave","pointercancel"].forEach(ev=>hold.addEventListener(ev,()=>setPress(false)));
+window.addEventListener("keydown",e=>{if(e.code==="Space"){e.preventDefault();setPress(true);}if(!s.run&&e.code==="Enter")startGame();});
+window.addEventListener("keyup",e=>{if(e.code==="Space")setPress(false);});
+start.addEventListener("click",startGame);
+hs();draw();
+</script>
+</body>
+</html>
